@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/blastjax/maya-golang/internal/api"
 	"github.com/blastjax/maya-golang/internal/config"
 	"github.com/blastjax/maya-golang/internal/database"
 	"github.com/blastjax/maya-golang/internal/github"
@@ -35,6 +36,8 @@ func main() {
 		listUsersCommand(cfg)
 	case "setup-db":
 		setupDBCommand(cfg)
+	case "serve":
+		serveCommand(cfg)
 	case "help", "--help", "-h":
 		printUsage()
 		os.Exit(0)
@@ -241,6 +244,41 @@ func setupDBCommand(cfg *config.Config) {
 	fmt.Println("Database schema created successfully!")
 }
 
+func serveCommand(cfg *config.Config) {
+	// Create a new FlagSet for the serve subcommand
+	serveCmd := flag.NewFlagSet("serve", flag.ExitOnError)
+
+	var (
+		help = serveCmd.Bool("help", false, "Show help message")
+	)
+
+	serveCmd.Usage = func() {
+		printServeUsage()
+	}
+
+	// Parse the arguments starting from position 2 (after serve)
+	serveCmd.Parse(os.Args[2:])
+
+	if *help {
+		printServeUsage()
+		os.Exit(0)
+	}
+
+	// Create and start the API server
+	server, err := api.NewServer(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating API server: %v\n", err)
+		os.Exit(1)
+	}
+	defer server.Close()
+
+	// Start the server (this blocks until shutdown)
+	if err := server.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func printUsage() {
 	fmt.Fprintf(os.Stderr, "GitHub Users CLI Tool\n\n")
 	fmt.Fprintf(os.Stderr, "Usage: %s <command> [options]\n\n", os.Args[0])
@@ -296,6 +334,25 @@ func printSetupDBUsage() {
 	fmt.Fprintf(os.Stderr, "Options:\n")
 	fmt.Fprintf(os.Stderr, "  -help\n")
 	fmt.Fprintf(os.Stderr, "        Show help message\n")
+}
+
+func printServeUsage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s serve [options]\n\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Starts the REST API server for GitHub Users management\n\n")
+	fmt.Fprintf(os.Stderr, "API Endpoints:\n")
+	fmt.Fprintf(os.Stderr, "  GET    /users              List all users from database (with pagination)\n")
+	fmt.Fprintf(os.Stderr, "  GET    /users/:username    Get specific user (Redis cache + GitHub fallback)\n")
+	fmt.Fprintf(os.Stderr, "  PUT    /users/:username    Update user details in database and cache\n")
+	fmt.Fprintf(os.Stderr, "  DELETE /users/:username    Delete user from database and cache\n")
+	fmt.Fprintf(os.Stderr, "  GET    /health             Health check endpoint\n")
+	fmt.Fprintf(os.Stderr, "\nOptions:\n")
+	fmt.Fprintf(os.Stderr, "  -help\n")
+	fmt.Fprintf(os.Stderr, "        Show help message\n")
+	fmt.Fprintf(os.Stderr, "\nServer Configuration (via environment variables):\n")
+	fmt.Fprintf(os.Stderr, "  API_HOST=localhost        Server host address\n")
+	fmt.Fprintf(os.Stderr, "  API_PORT=8080             Server port\n")
+	fmt.Fprintf(os.Stderr, "  REDIS_HOST=localhost      Redis cache host\n")
+	fmt.Fprintf(os.Stderr, "  REDIS_TTL_SECONDS=30      Cache TTL in seconds\n")
 }
 
 func displayUsers(users []github.User, format string) error {
