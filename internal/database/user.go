@@ -1,105 +1,70 @@
 package database
 
 import (
-	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/blastjax/maya-golang/internal/github"
+	"gorm.io/gorm"
 )
 
-// GetUserByUsername retrieves a user by username from the database
+// GetUserByUsername retrieves a user by username from the database using GORM
 func (r *UserRepository) GetUserByUsername(username string) (*github.User, error) {
-	query := `
-		SELECT id, login, avatar_url, url, type, name, company, blog, location, email, bio, created_at, updated_at
-		FROM users
-		WHERE login = ?
-	`
+	var user github.User
+	result := r.db.Where("login = ?", username).First(&user)
 
-	user := &github.User{}
-	row := r.db.QueryRow(query, username)
-
-	err := row.Scan(
-		&user.ID, &user.Login, &user.AvatarURL, &user.URL, &user.Type,
-		&user.Name, &user.Company, &user.Blog, &user.Location,
-		&user.Email, &user.Bio, &user.CreatedAt, &user.UpdatedAt,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("user not found")
 		}
-		return nil, fmt.Errorf("failed to get user by username: %w", err)
+		return nil, fmt.Errorf("failed to get user by username: %w", result.Error)
 	}
 
-	return user, nil
+	return &user, nil
 }
 
-// UpdateUser updates an existing user in the database
+// UpdateUser updates an existing user in the database using GORM
 func (r *UserRepository) UpdateUser(user *github.User) error {
-	query := `
-		UPDATE users SET
-			avatar_url = ?, url = ?, type = ?, name = ?, company = ?, location = ?, email = ?, bio = ?, created_at = ?, updated_at = ?, synced_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-	`
+	// Set UpdatedAt to current time
+	user.UpdatedAt = time.Now()
 
-	result, err := r.db.Exec(query,
-		user.AvatarURL, user.URL, user.Type,
-		user.Name, user.Company, user.Blog, user.Location, user.Email,
-		user.Bio, user.CreatedAt, user.UpdatedAt, user.ID,
-	)
+	result := r.db.Save(user)
 
-	if err != nil {
-		return fmt.Errorf("failed to update user %s: %w", user.Login, err)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update user %s: %w", user.Login, result.Error)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return fmt.Errorf("user not found")
 	}
 
 	return nil
 }
 
-// DeleteUser deletes a user from the database by username
+// DeleteUser deletes a user from the database by username using GORM
 func (r *UserRepository) DeleteUser(username string) error {
-	query := `DELETE FROM users WHERE login = ?`
+	result := r.db.Where("login = ?", username).Delete(&github.User{})
 
-	result, err := r.db.Exec(query, username)
-	if err != nil {
-		return fmt.Errorf("failed to delete user %s: %w", username, err)
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete user %s: %w", username, result.Error)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return fmt.Errorf("user not found")
 	}
 
 	return nil
 }
 
-// DeleteUserByID deletes a user from the database by user ID
+// DeleteUserByID deletes a user from the database by user ID using GORM
 func (r *UserRepository) DeleteUserByID(userID int) error {
-	query := `DELETE FROM users WHERE id = ?`
+	result := r.db.Delete(&github.User{}, userID)
 
-	result, err := r.db.Exec(query, userID)
-	if err != nil {
-		return fmt.Errorf("failed to delete user with ID %d: %w", userID, err)
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete user with ID %d: %w", userID, result.Error)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return fmt.Errorf("user not found")
 	}
 

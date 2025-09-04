@@ -1,34 +1,47 @@
 package database
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 
 	"github.com/blastjax/maya-golang/internal/config"
+	"github.com/blastjax/maya-golang/internal/github"
 
-	_ "github.com/go-sql-driver/mysql"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-// DB represents a database connection
+// DB represents a database connection using GORM
 type DB struct {
-	*sql.DB
+	*gorm.DB
 }
 
-// New creates a new database connection
+// New creates a new database connection using GORM
 func New(cfg *config.DatabaseConfig) (*DB, error) {
-	db, err := sql.Open("mysql", cfg.GetDSN())
+	// Configure GORM logger level based on environment
+	gormLogger := logger.Default.LogMode(logger.Info)
+
+	db, err := gorm.Open(mysql.Open(cfg.GetDSN()), &gorm.Config{
+		Logger: gormLogger,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	// Get underlying sql.DB to configure connection pool
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+
 	// Configure connection pool
-	db.SetMaxOpenConns(cfg.MaxConnections)
-	db.SetMaxIdleConns(cfg.MaxIdleConnections)
-	db.SetConnMaxLifetime(time.Hour)
+	sqlDB.SetMaxOpenConns(cfg.MaxConnections)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConnections)
+	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	// Test the connection
-	if err := db.Ping(); err != nil {
+	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -37,35 +50,18 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 
 // Close closes the database connection
 func (db *DB) Close() error {
-	return db.DB.Close()
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+	return sqlDB.Close()
 }
 
-// CreateSchema creates the necessary database schema
+// CreateSchema creates the necessary database schema using GORM auto-migration
 func (db *DB) CreateSchema() error {
-	query := `
-	CREATE TABLE IF NOT EXISTS users (
-		id BIGINT PRIMARY KEY,
-		login VARCHAR(255) NOT NULL UNIQUE,
-		avatar_url TEXT,
-		url TEXT,
-		type VARCHAR(50) NOT NULL,
-		name VARCHAR(255),
-		company VARCHAR(255),
-		blog TEXT,
-		location VARCHAR(255),
-		email VARCHAR(255),
-		bio TEXT,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP,
-		synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		INDEX idx_login (login),
-		INDEX idx_type (type),
-		INDEX idx_synced_at (synced_at)
-	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-	`
-
-	if _, err := db.Exec(query); err != nil {
-		return fmt.Errorf("failed to create schema: %w", err)
+	// Auto-migrate the User model
+	if err := db.AutoMigrate(&github.User{}); err != nil {
+		return fmt.Errorf("failed to auto-migrate schema: %w", err)
 	}
 
 	return nil
