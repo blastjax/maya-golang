@@ -35,6 +35,13 @@ func main() {
 		listUsersCommand(cfg)
 	case "setup-db":
 		setupDBCommand(cfg)
+	case "help", "--help", "-h":
+		printUsage()
+		os.Exit(0)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", command)
+		printUsage()
+		os.Exit(1)
 	}
 
 }
