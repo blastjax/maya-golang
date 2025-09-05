@@ -74,6 +74,11 @@ func (m *MockUserRepository) GetLastSyncedUserID() (int, error) {
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockUserRepository) CreateUser(user *github.User) error {
+	args := m.Called(user)
+	return args.Error(0)
+}
+
 type MockRedisClient struct {
 	mock.Mock
 }

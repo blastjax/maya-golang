@@ -17,6 +17,7 @@ type UserRepository interface {
 	InsertUsers(users []github.User) error
 	GetUser(id int) (*github.User, error)
 	GetLastSyncedUserID() (int, error)
+	CreateUser(user *github.User) error
 }
 
 // RedisClient interface defines the methods for Redis cache operations

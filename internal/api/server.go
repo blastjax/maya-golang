@@ -86,6 +86,7 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/users/:username", s.handlers.GetUser)       // GET /users/:username
 	s.router.PUT("/users/:username", s.handlers.UpdateUser)    // PUT /users/:username
 	s.router.DELETE("/users/:username", s.handlers.DeleteUser) // DELETE /users/:username
+	s.router.POST("/users", s.handlers.CreateUser)             // POST /users
 }
 
 // Start starts the API server

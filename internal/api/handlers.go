@@ -25,6 +25,21 @@ func NewHandlers(userRepo UserRepository, redisClient RedisClient, githubClient 
 	}
 }
 
+// UserCreateRequest represents the payload for creating a new user
+type UserCreateRequest struct {
+	ID        int     `json:"id" binding:"required"`
+	Login     string  `json:"login" binding:"required"`
+	AvatarURL string  `json:"avatar_url,omitempty"`
+	URL       string  `json:"url,omitempty"`
+	Type      string  `json:"type" binding:"required"`
+	Name      *string `json:"name,omitempty"`
+	Company   *string `json:"company,omitempty"`
+	Blog      *string `json:"blog,omitempty"`
+	Location  *string `json:"location,omitempty"`
+	Email     *string `json:"email,omitempty"`
+	Bio       *string `json:"bio,omitempty"`
+}
+
 // UserUpdateRequest represents the JSON payload for updating user details
 type UserUpdateRequest struct {
 	Name     *string `json:"name,omitempty"`
@@ -293,5 +308,69 @@ func (h *Handlers) HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
 		"service": "github-users-api",
+	})
+}
+
+// CreateUser handles POST /user - Create user and store to database
+func (h *Handlers) CreateUser(c *gin.Context) {
+	// Parse JSON payload
+	var newUser UserCreateRequest
+	if err := c.ShouldBindJSON(&newUser); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid JSON payload",
+		})
+		return
+	}
+
+	// Basic validation
+	if newUser.Login == "" || newUser.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Both 'id' and 'login' are required",
+		})
+		return
+	}
+
+	// Step 1: Check if user already exists in DB
+	existingUser, _ := h.userRepo.GetUserByUsername(newUser.Login)
+	if existingUser != nil {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "User already exists",
+		})
+		return
+	}
+
+	// Step 2: Build new user struct
+	user := &github.User{
+		ID:        newUser.ID,
+		Login:     newUser.Login,
+		AvatarURL: newUser.AvatarURL,
+		URL:       newUser.URL,
+		Type:      newUser.Type,
+		Name:      newUser.Name,
+		Company:   newUser.Company,
+		Blog:      newUser.Blog,
+		Location:  newUser.Location,
+		Email:     newUser.Email,
+		Bio:       newUser.Bio,
+	}
+
+	// Step 3: Insert into MySQL database
+	if err := h.userRepo.CreateUser(user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to insert user into database",
+		})
+		return
+	}
+
+	// Step 4: Save to Redis cache (optional)
+	ctx := c.Request.Context()
+	if err := h.redisClient.UpdateUserInCache(ctx, user.Login, user); err != nil {
+		c.Header("X-Cache-Insert-Error", "true")
+	}
+
+	// Return created user
+	c.JSON(http.StatusCreated, gin.H{
+		"user":    user,
+		"message": "User created successfully",
 	})
 }

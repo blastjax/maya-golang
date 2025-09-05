@@ -70,3 +70,21 @@ func (r *UserRepository) DeleteUserByID(userID int) error {
 
 	return nil
 }
+
+// CreateUser inserts a new user into the database using GORM
+func (r *UserRepository) CreateUser(user *github.User) error {
+	// Set CreatedAt and UpdatedAt to current time
+	if user.CreatedAt.IsZero() {
+		user.CreatedAt = time.Now()
+	}
+	if user.UpdatedAt.IsZero() {
+		user.UpdatedAt = time.Now()
+	}
+
+	result := r.db.Create(user)
+	if result.Error != nil {
+		return fmt.Errorf("failed to create user %s: %w", user.Login, result.Error)
+	}
+
+	return nil
+}
